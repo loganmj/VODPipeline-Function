@@ -40,9 +40,9 @@ class TestLoggingUtils(unittest.TestCase):
         logging_utils.log("Test")
         output = mock_stdout.getvalue()
         # Check for timestamp format (YYYY-MM-DD HH:MM:SS)
-        # Look for the pattern [PIPELINE] YYYY-MM-DD HH:MM:SS
+        # Look for the pattern [PIPELINE] YYYY-MM-DD HH:MM:SS -
         import re
-        timestamp_pattern = r'\[PIPELINE\] \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+        timestamp_pattern = r'\[PIPELINE\] \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} -'
         self.assertRegex(output, timestamp_pattern, "Log should include timestamp in format YYYY-MM-DD HH:MM:SS")
 
     @patch('sys.stdout', new_callable=StringIO)
