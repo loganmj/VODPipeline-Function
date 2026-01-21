@@ -13,7 +13,7 @@ An automated pipeline for first-pass editing of VOD recordings. This tool watche
 
 ## System Requirements
 
-- Python 3.10 or higher
+- Python 3.10
 - FFmpeg
 - PySceneDetect
 - Whisper.cpp (optional, for subtitle generation)
