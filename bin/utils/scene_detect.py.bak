@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+import subprocess
+from pathlib import Path
+
+from bin.utils.logging_utils import log
+
+# Full path to scenedetect binary (pipx installs here under root)
+SCENEDETECT_BIN = "/root/.local/bin/scenedetect"
+
+
+def run_scene_detect(clean_path: Path, scenes_dir: Path) -> Path:
+    """
+    Run PySceneDetect on the cleaned video and return the path to the scenes CSV.
+    Automatically detects the correct output filename (e.g., clean-Scenes.csv).
+    """
+
+    # Ensure output directory exists
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        SCENEDETECT_BIN,
+        "-i", str(clean_path),
+        "-o", str(scenes_dir),
+        "detect-content",
+        "list-scenes",
+    ]
+
+    log(f"[SCENE] Running: {' '.join(cmd)}")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        log(f"[SCENE] ERROR: scenedetect binary not found at {SCENEDETECT_BIN}")
+        raise
+
+    if proc.returncode != 0:
+        log(f"[SCENE] scenedetect failed with exit code {proc.returncode}")
+        log(f"[SCENE] stdout: {proc.stdout}")
+        log(f"[SCENE] stderr: {proc.stderr}")
+        raise RuntimeError("Scene detection failed")
+
+    # Look for the actual output file (PySceneDetect 0.6.x uses <name>-Scenes.csv)
+    csv_files = list(scenes_dir.glob("*-Scenes.csv"))
+
+    if not csv_files:
+        log(f"[SCENE] ERROR: No scenes CSV found in {scenes_dir}")
+        log(f"[SCENE] stdout: {proc.stdout}")
+        log(f"[SCENE] stderr: {proc.stderr}")
+        raise FileNotFoundError("Scenes CSV missing after scenedetect run")
+
+    scenes_csv = csv_files[0]
+    log(f"[SCENE] Scene detection complete: {scenes_csv}")
+
+    return scenes_csv
+
+
+def parse_scenes_csv(csv_path: Path) -> list[tuple[float, float]]:
+    """
+    Parse a PySceneDetect CSV and return a list of (start, end) times in seconds.
+    Compatible with PySceneDetect 0.6.x output format.
+    """
+
+    scenes: list[tuple[float, float]] = []
+
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Scenes CSV not found: {csv_path}")
+
+    with csv_path.open() as f:
+        for line in f:
+            line = line.strip()
+
+            # Skip header or empty lines
+            if not line or line.lower().startswith("scene"):
+                continue
+
+            parts = line.split(",")
+
+            # Expected format: Scene #, Start (sec), End (sec), ...
+            if len(parts) < 3:
+                continue
+
+            try:
+                start = float(parts[1])
+                end = float(parts[2])
+                scenes.append((start, end))
+            except ValueError:
+                # Skip malformed rows
+                continue
+
+    log(f"[SCENE] Parsed {len(scenes)} scenes from {csv_path}")
+    return scenes
