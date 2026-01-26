@@ -119,7 +119,7 @@ class JobStatusClient:
         status = JobStatus.create_failed(job_id, file_name, error_message, current_percent)
         return self.post_status(status)
     
-    def emit_event(self, job_id: str, file_name: str, stage: str, percent: int, error_message: str | None = None) -> bool:
+    def emit_event(self, job_id: str, file_name: str, stage: str, percent: int, error_message: Optional[str] = None) -> bool:
         """
         Unified event emission helper method.
         
