@@ -135,6 +135,34 @@ Edit `bin/config.py` to customize:
 - **Directories**: Input, output, temporary, and log paths
 - **Silence Detection**: Noise threshold (`SILENCE_NOISE_DB`) and minimum duration (`SILENCE_MIN_DURATION`)
 - **Highlight Extraction**: Maximum number (`MAX_HIGHLIGHTS`), minimum duration (`MIN_HIGHLIGHT_DURATION`), and maximum duration (`MAX_HIGHLIGHT_DURATION`)
+- **API Integration**: Set the `API_BASE_URL` environment variable to enable job status events (e.g., `export API_BASE_URL=http://localhost:5000`)
+
+### Job Status Events
+
+The pipeline emits job status events to the configured API endpoint throughout the processing lifecycle:
+
+- **jobStarted**: Sent when processing begins
+- **jobStageChanged**: Sent when entering a new processing stage (Silence Removal, Scene Detection, Highlight Extraction, Archiving)
+- **jobProgressUpdated**: Sent periodically during processing to report progress
+- **jobCompleted**: Sent when processing completes successfully
+- **jobFailed**: Sent if an error occurs during processing
+
+Each event includes:
+- Unique job ID (UUID)
+- File name
+- Current stage
+- Progress percentage (0-100)
+- UTC timestamp
+- Error message (for failures only)
+
+To enable API communication, set the `API_BASE_URL` environment variable:
+
+```bash
+export API_BASE_URL=http://localhost:5000
+python3 -m bin.vod_watcher
+```
+
+If `API_BASE_URL` is not set or is empty, the pipeline will run without API communication.
 
 ## Running as a Service
 
@@ -153,6 +181,7 @@ User=your-user
 WorkingDirectory=/path/to/VODPipeline-Function
 ExecStart=/usr/bin/python3 -m bin.vod_watcher
 Restart=always
+Environment="API_BASE_URL=http://localhost:5000"
 
 [Install]
 WantedBy=multi-user.target
