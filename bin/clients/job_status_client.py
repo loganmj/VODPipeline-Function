@@ -118,3 +118,62 @@ class JobStatusClient:
         self.state_manager.fail_job(error_message)
         status = JobStatus.create_failed(job_id, file_name, error_message, current_percent)
         return self.post_status(status)
+    
+    def emit_event(self, job_id: str, file_name: str, stage: str, percent: int, error_message: Optional[str] = None) -> bool:
+        """
+        Unified event emission helper method.
+        
+        This is the primary interface for emitting job status events. It handles:
+        1. Updating internal state
+        2. Building the appropriate JobStatus DTO
+        3. POSTing to the API
+        4. Handling transient failures gracefully
+        
+        The method automatically determines the event type based on the stage:
+        - "Starting" -> jobStarted event
+        - "Completed" -> jobCompleted event
+        - "Failed" -> jobFailed event
+        - Any other stage -> jobStageChanged or jobProgressUpdated event
+        
+        Args:
+            job_id: Unique job identifier
+            file_name: Name of the file being processed
+            stage: Current processing stage (e.g., "Starting", "Silence Removal", "Completed", "Failed")
+            percent: Current progress percentage (0-100)
+            error_message: Optional error message (only used for "Failed" stage)
+            
+        Returns:
+            bool: True if the event was successfully posted, False otherwise
+            
+        Examples:
+            # Job started
+            client.emit_event(job_id, file_name, "Starting", 0)
+            
+            # Stage changed
+            client.emit_event(job_id, file_name, "Silence Removal", 10)
+            
+            # Progress update
+            client.emit_event(job_id, file_name, "Silence Removal", 40)
+            
+            # Job completed
+            client.emit_event(job_id, file_name, "Completed", 100)
+            
+            # Job failed
+            client.emit_event(job_id, file_name, "Failed", 35, error_message="Processing error")
+        """
+        # Handle specific event types
+        if stage == "Starting":
+            return self.post_started(job_id, file_name)
+        elif stage == "Completed":
+            return self.post_completed(job_id, file_name)
+        elif stage == "Failed":
+            return self.post_failed(job_id, file_name, error_message or "Unknown error", percent)
+        else:
+            # For other stages, determine if this is a stage change or progress update
+            current_state = self.state_manager.get_state()
+            if current_state.stage != stage:
+                # Stage has changed
+                return self.post_stage_changed(job_id, file_name, stage, percent)
+            else:
+                # Same stage, just progress update
+                return self.post_progress(job_id, file_name, stage, percent)

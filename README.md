@@ -156,6 +156,38 @@ Each event includes:
 - UTC timestamp
 - Error message (for failures only)
 
+#### Event Emission API
+
+The pipeline provides a unified `emit_event()` method in the `JobStatusClient` that handles:
+1. Updating internal state
+2. Building the appropriate JobStatus DTO
+3. POSTing to the API
+4. Handling transient failures gracefully
+
+**Example Usage**:
+```python
+from bin.clients.job_status_client import JobStatusClient
+
+client = JobStatusClient(api_base_url="http://localhost:5000")
+
+# Job started
+client.emit_event(job_id, file_name, "Starting", 0)
+
+# Stage changed
+client.emit_event(job_id, file_name, "Silence Removal", 10)
+
+# Progress update
+client.emit_event(job_id, file_name, "Silence Removal", 40)
+
+# Job completed
+client.emit_event(job_id, file_name, "Completed", 100)
+
+# Job failed
+client.emit_event(job_id, file_name, "Failed", 35, error_message="Processing error")
+```
+
+The method automatically determines the event type based on the stage name and the current state, emitting the appropriate event (jobStarted, jobStageChanged, jobProgressUpdated, jobCompleted, or jobFailed).
+
 To enable API communication, set the `API_BASE_URL` environment variable:
 
 ```bash

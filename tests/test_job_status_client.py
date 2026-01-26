@@ -1,4 +1,5 @@
 """Unit tests for JobStatusClient."""
+import json
 import unittest
 import sys
 from pathlib import Path
@@ -131,6 +132,204 @@ class TestJobStatusClient(unittest.TestCase):
         
         self.assertTrue(result)
         self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_starting(self, mock_request, mock_urlopen):
+        """Test emit_event for jobStarted event."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        result = client.emit_event("test-id", "test.mp4", "Starting", 0)
+        
+        self.assertTrue(result)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        
+        # Verify the request payload
+        call_args = mock_request.call_args
+        posted_data = json.loads(call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Starting")
+        self.assertEqual(posted_data['percent'], 0)
+        self.assertEqual(posted_data['jobId'], "test-id")
+        self.assertEqual(posted_data['fileName'], "test.mp4")
+        self.assertIsNone(posted_data['errorMessage'])
+        
+        # Verify internal state was updated
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Starting")
+        self.assertEqual(state.percent, 0)
+        self.assertEqual(state.job_id, "test-id")
+        self.assertEqual(state.file_name, "test.mp4")
+        self.assertTrue(state.is_running)
+    
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_stage_change(self, mock_request, mock_urlopen):
+        """Test emit_event for stage change."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        # First, start a job
+        client.emit_event("test-id", "test.mp4", "Starting", 0)
+        # Then change stage
+        result = client.emit_event("test-id", "test.mp4", "Processing", 20)
+        
+        self.assertTrue(result)
+        # Should have called urlopen twice (once for starting, once for stage change)
+        self.assertEqual(mock_urlopen.call_count, 2)
+        
+        # Verify the second call was a stage change with correct payload
+        second_call_args = mock_request.call_args_list[1]
+        posted_data = json.loads(second_call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Processing")
+        self.assertEqual(posted_data['percent'], 20)
+        self.assertEqual(posted_data['jobId'], "test-id")
+        self.assertEqual(posted_data['fileName'], "test.mp4")
+        
+        # Verify internal state reflects the stage change
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Processing")
+        self.assertEqual(state.percent, 20)
+        self.assertTrue(state.is_running)
+    
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_progress_update(self, mock_request, mock_urlopen):
+        """Test emit_event for progress update within same stage."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        # Start job and set stage
+        client.emit_event("test-id", "test.mp4", "Starting", 0)
+        client.emit_event("test-id", "test.mp4", "Processing", 20)
+        # Update progress in same stage
+        result = client.emit_event("test-id", "test.mp4", "Processing", 50)
+        
+        self.assertTrue(result)
+        # Should have called urlopen three times
+        self.assertEqual(mock_urlopen.call_count, 3)
+        
+        # Verify the third call was a progress update (same stage, different percent)
+        third_call_args = mock_request.call_args_list[2]
+        posted_data = json.loads(third_call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Processing")
+        self.assertEqual(posted_data['percent'], 50)
+        self.assertEqual(posted_data['jobId'], "test-id")
+        self.assertEqual(posted_data['fileName'], "test.mp4")
+        
+        # Verify internal state reflects the progress update
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Processing")
+        self.assertEqual(state.percent, 50)
+        self.assertTrue(state.is_running)
+    
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_completed(self, mock_request, mock_urlopen):
+        """Test emit_event for jobCompleted event."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        result = client.emit_event("test-id", "test.mp4", "Completed", 100)
+        
+        self.assertTrue(result)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        
+        # Verify the request payload
+        call_args = mock_request.call_args
+        posted_data = json.loads(call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Completed")
+        self.assertEqual(posted_data['percent'], 100)
+        self.assertEqual(posted_data['jobId'], "test-id")
+        self.assertEqual(posted_data['fileName'], "test.mp4")
+        
+        # Verify internal state was updated
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Completed")
+        self.assertEqual(state.percent, 100)
+        self.assertFalse(state.is_running)
+    
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_failed(self, mock_request, mock_urlopen):
+        """Test emit_event for jobFailed event."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        result = client.emit_event("test-id", "test.mp4", "Failed", 35, error_message="Test error")
+        
+        self.assertTrue(result)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        
+        # Verify the request payload includes error message and correct percent
+        call_args = mock_request.call_args
+        posted_data = json.loads(call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Failed")
+        self.assertEqual(posted_data['percent'], 35)
+        self.assertEqual(posted_data['jobId'], "test-id")
+        self.assertEqual(posted_data['fileName'], "test.mp4")
+        self.assertEqual(posted_data['errorMessage'], "Test error")
+        
+        # Verify internal state was updated (note: percent is not updated in state for failures)
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Failed")
+        self.assertEqual(state.error_message, "Test error")
+        self.assertFalse(state.is_running)
+    
+    @patch('urllib.request.urlopen')
+    @patch('urllib.request.Request')
+    def test_emit_event_failed_default_error_message(self, mock_request, mock_urlopen):
+        """Test emit_event for jobFailed event with no error message."""
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.__enter__ = Mock(return_value=mock_response)
+        mock_response.__exit__ = Mock(return_value=False)
+        mock_urlopen.return_value = mock_response
+        
+        client = JobStatusClient(api_base_url="http://localhost:5000")
+        result = client.emit_event("test-id", "test.mp4", "Failed", 35)
+        
+        self.assertTrue(result)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        
+        # Verify the request payload includes default error message and correct percent
+        call_args = mock_request.call_args
+        posted_data = json.loads(call_args[1]['data'].decode('utf-8'))
+        self.assertEqual(posted_data['stage'], "Failed")
+        self.assertEqual(posted_data['percent'], 35)
+        self.assertEqual(posted_data['errorMessage'], "Unknown error")
+        
+        # Verify internal state was updated with default error message
+        state = client.state_manager.get_state()
+        self.assertEqual(state.stage, "Failed")
+        self.assertEqual(state.error_message, "Unknown error")
+        self.assertFalse(state.is_running)
 
 
 if __name__ == '__main__':
