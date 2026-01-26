@@ -22,3 +22,7 @@ SILENCE_MIN_DURATION = 1.5  # seconds 0.5 was best so far
 MAX_HIGHLIGHTS = 10
 MIN_HIGHLIGHT_DURATION = 10.0  # seconds
 MAX_HIGHLIGHT_DURATION = 90.0  # seconds
+
+# API configuration for job status events
+# Set to None or empty string to disable API communication
+API_BASE_URL = os.environ.get("API_BASE_URL", "")  # e.g., "http://localhost:5000"
